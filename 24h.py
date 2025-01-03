@@ -126,10 +126,7 @@ def calc_statistics(df, label='全天'):
             'count': 0
         }
 
-    # 这里对 df 再次拷贝是可选；若上一步的 day_df / night_df 已是副本，可不加
-    # df = df.copy()
-
-    # 平均动脉压（MAP）简单计算公式： MAP = DBP + (SBP - DBP) / 3
+    # 计算平均动脉压（MAP）
     df['MAP'] = df['DBP'] + (df['SBP'] - df['DBP']) / 3.0
 
     mean_sbp = df['SBP'].mean()
@@ -169,12 +166,77 @@ def calc_statistics(df, label='全天'):
 
     return stats
 
-def calc_extra_indices(day_stats, night_stats):
+
+# ============ 以下为改进重点：新增筛选时段、晨峰血压、改进的昼夜差&下降率等计算 ============
+
+def filter_by_time_range(df, start_time_str, end_time_str):
     """
-    计算额外指标：收缩压/舒张压的昼夜差值、下降率、极限差比值、晨峰血压等。
-    可根据实际需求进行调整。
+    根据指定的时段 [start_time, end_time)，返回该时间段内的所有数据。
+    若 start_time > end_time，视为跨午夜。否则视为同日区间。
     """
-    # 如果有任一为空，则返回空值
+    if df.empty:
+        return df
+
+    fmt = '%H:%M'
+    start_time = datetime.strptime(start_time_str, fmt).time()
+    end_time = datetime.strptime(end_time_str, fmt).time()
+
+    def in_range(t):
+        # 如果 start < end：同一天段
+        if start_time < end_time:
+            return start_time <= t < end_time
+        else:
+            # 若跨午夜
+            return (t >= start_time) or (t < end_time)
+
+    df_filtered = df[df['DateTime'].dt.time.apply(in_range)].copy()
+    return df_filtered
+
+
+def calc_morning_surge(full_df,
+                       morning_start='06:00', morning_end='08:00',
+                       pre_start='03:00', pre_end='06:00'):
+    """
+    计算“晨峰血压”：默认对比 03:00-06:00 与 06:00-08:00 两段数据的平均 SBP/DBP。
+    返回 dict, 包含 sbp_morning_surge, dbp_morning_surge, 以及这两段的平均值。
+    """
+    if full_df.empty:
+        return {}
+
+    # 晨间时段
+    morning_df = filter_by_time_range(full_df, morning_start, morning_end)
+    # 凌晨对比时段
+    pre_morning_df = filter_by_time_range(full_df, pre_start, pre_end)
+
+    if morning_df.empty or pre_morning_df.empty:
+        # 数据不足，返回空
+        return {}
+
+    sbp_morning_avg = morning_df['SBP'].mean()
+    sbp_pre_morning_avg = pre_morning_df['SBP'].mean()
+    dbp_morning_avg = morning_df['DBP'].mean()
+    dbp_pre_morning_avg = pre_morning_df['DBP'].mean()
+
+    sbp_morning_surge = sbp_morning_avg - sbp_pre_morning_avg
+    dbp_morning_surge = dbp_morning_avg - dbp_pre_morning_avg
+
+    return {
+        'sbp_morning_surge': round(sbp_morning_surge, 2),
+        'dbp_morning_surge': round(dbp_morning_surge, 2),
+        'sbp_morning_avg': round(sbp_morning_avg, 2),
+        'sbp_pre_morning_avg': round(sbp_pre_morning_avg, 2),
+        'dbp_morning_avg': round(dbp_morning_avg, 2),
+        'dbp_pre_morning_avg': round(dbp_pre_morning_avg, 2),
+    }
+
+
+def calc_extra_indices(day_stats, night_stats, full_df,
+                       morning_start='06:00', morning_end='08:00',
+                       pre_morning_start='03:00', pre_morning_end='06:00'):
+    """
+    改进版：在原有昼夜差值、下降率、极限差比值等基础上，额外计算更贴近临床定义的“晨峰血压”。
+    """
+    # 如果有任一为空，则直接返回空
     if day_stats['mean_sbp'] is None or night_stats['mean_sbp'] is None:
         return {}
 
@@ -183,37 +245,47 @@ def calc_extra_indices(day_stats, night_stats):
     dbp_day = day_stats['mean_dbp']
     dbp_night = night_stats['mean_dbp']
 
-    # 差值
-    sbp_diff = round(sbp_day - sbp_night, 2)
-    dbp_diff = round(dbp_day - dbp_night, 2)
+    # 1) 昼夜差值
+    sbp_diff = sbp_day - sbp_night
+    dbp_diff = dbp_day - dbp_night
 
-    # 下降率(Dip %) = (day_mean - night_mean) / day_mean * 100
-    sbp_dip = round(sbp_diff / sbp_day * 100, 2) if sbp_day != 0 else 0
-    dbp_dip = round(dbp_diff / dbp_day * 100, 2) if dbp_day != 0 else 0
+    # 2) 下降率 (Dip %) = (day_mean - night_mean) / day_mean * 100
+    sbp_dip = (sbp_diff / sbp_day * 100) if sbp_day != 0 else None
+    dbp_dip = (dbp_diff / dbp_day * 100) if dbp_day != 0 else None
 
-    # 极限差比值(夜间/白天) * 100% （这里纯示例）
-    sbp_ratio = round((sbp_night / sbp_day) * 100, 2) if sbp_day != 0 else None
-    dbp_ratio = round((dbp_night / dbp_day) * 100, 2) if dbp_day != 0 else None
+    # 3) 昼夜比(极限差比值) = (night_mean / day_mean) * 100%
+    sbp_ratio = (sbp_night / sbp_day * 100) if sbp_day != 0 else None
+    dbp_ratio = (dbp_night / dbp_day * 100) if dbp_day != 0 else None
 
-    # 晨峰血压：可根据自定义时段进行精细计算，这里仅演示 day_mean - night_mean
-    sbp_morning_surge = sbp_diff
-    dbp_morning_surge = dbp_diff
+    # 4) 晨峰血压计算
+    surge_info = calc_morning_surge(full_df,
+                                    morning_start=morning_start,
+                                    morning_end=morning_end,
+                                    pre_start=pre_morning_start,
+                                    pre_end=pre_morning_end)
 
-    return {
-        'sbp_day': sbp_day,
-        'sbp_night': sbp_night,
-        'sbp_diff': sbp_diff,
-        'sbp_dip': sbp_dip,
-        'sbp_ratio': sbp_ratio,
-        'sbp_morning_surge': sbp_morning_surge,
+    # 汇总
+    result = {
+        'sbp_day': round(sbp_day, 2),
+        'sbp_night': round(sbp_night, 2),
+        'sbp_diff': round(sbp_diff, 2),
+        'sbp_dip': round(sbp_dip, 2) if sbp_dip is not None else None,
+        'sbp_ratio': round(sbp_ratio, 2) if sbp_ratio is not None else None,
 
-        'dbp_day': dbp_day,
-        'dbp_night': dbp_night,
-        'dbp_diff': dbp_diff,
-        'dbp_dip': dbp_dip,
-        'dbp_ratio': dbp_ratio,
-        'dbp_morning_surge': dbp_morning_surge,
+        'dbp_day': round(dbp_day, 2),
+        'dbp_night': round(dbp_night, 2),
+        'dbp_diff': round(dbp_diff, 2),
+        'dbp_dip': round(dbp_dip, 2) if dbp_dip is not None else None,
+        'dbp_ratio': round(dbp_ratio, 2) if dbp_ratio is not None else None,
     }
+
+    if surge_info:
+        result.update(surge_info)
+
+    return result
+
+
+# ==================================================================
 
 def generate_plot(df, output_png='blood_pressure_plot.png'):
     """
@@ -256,7 +328,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     # 设置 Normal 和 Title 样式字体为 SimSun
     styles['Normal'].fontName = 'SimSun'
     styles['Title'].fontName = 'SimSun'
-    # 适当调大行距，避免中文字体可能出现的行间重叠
+    # 适当调大行距
     styles['Normal'].leading = 16
     styles['Title'].leading = 20
 
@@ -325,14 +397,17 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     # 显示额外指标
     story.append(Paragraph("<b>额外指标：</b>", styles['Normal']))
     if extra_indices:
+        # extra_indices 里包含 sbp_morning_surge, dbp_morning_surge 等
         text = f"""
-        收缩压(白天): {extra_indices['sbp_day']} mmHg，夜间: {extra_indices['sbp_night']} mmHg，<br/>
-        收缩压差值: {extra_indices['sbp_diff']} mmHg，下降率: {extra_indices['sbp_dip']}%，<br/>
-        极限差比值(夜/昼): {extra_indices['sbp_ratio']}%，晨峰血压: {extra_indices['sbp_morning_surge']} mmHg<br/>
+        收缩压(白天): {extra_indices.get('sbp_day', 'N/A')} mmHg，夜间: {extra_indices.get('sbp_night', 'N/A')} mmHg，<br/>
+        收缩压差值: {extra_indices.get('sbp_diff', 'N/A')} mmHg，下降率: {extra_indices.get('sbp_dip', 'N/A')}%，<br/>
+        极限差比值(夜/昼): {extra_indices.get('sbp_ratio', 'N/A')}%，
+        晨峰血压: {extra_indices.get('sbp_morning_surge', 'N/A')} mmHg<br/>
         <br/>
-        舒张压(白天): {extra_indices['dbp_day']} mmHg，夜间: {extra_indices['dbp_night']} mmHg，<br/>
-        舒张压差值: {extra_indices['dbp_diff']} mmHg，下降率: {extra_indices['dbp_dip']}%，<br/>
-        极限差比值(夜/昼): {extra_indices['dbp_ratio']}%，晨峰血压: {extra_indices['dbp_morning_surge']} mmHg<br/>
+        舒张压(白天): {extra_indices.get('dbp_day', 'N/A')} mmHg，夜间: {extra_indices.get('dbp_night', 'N/A')} mmHg，<br/>
+        舒张压差值: {extra_indices.get('dbp_diff', 'N/A')} mmHg，下降率: {extra_indices.get('dbp_dip', 'N/A')}%，<br/>
+        极限差比值(夜/昼): {extra_indices.get('dbp_ratio', 'N/A')}%，
+        晨峰血压: {extra_indices.get('dbp_morning_surge', 'N/A')} mmHg<br/>
         """
         story.append(Paragraph(text, styles['Normal']))
     story.append(Spacer(1, 20))
@@ -401,16 +476,24 @@ def main():
     file_path = "data/blood_pressure-test1.xlsx"  # Excel文件名
     df = read_data_from_excel(file_path)
 
-    # 2. 拆分白天、夜间数据（并返回副本）
+    # 2. 拆分白天、夜间数据
     day_df, night_df, full_df = split_day_night(df, day_start='08:00', night_start='23:00')
 
-    # 3. 计算统计指标
+    # 3. 分别计算统计指标
     day_stats = calc_statistics(day_df, label='白天')
     night_stats = calc_statistics(night_df, label='夜间')
     full_stats = calc_statistics(full_df, label='全天')
 
-    # 4. 计算额外指标
-    extra_indices = calc_extra_indices(day_stats, night_stats)
+    # 4. 计算额外指标（包含昼夜差值、下降率、晨峰血压等改进）
+    extra_indices = calc_extra_indices(
+        day_stats,
+        night_stats,
+        full_df,
+        morning_start='06:00',   # 可根据需求自定义
+        morning_end='08:00',
+        pre_morning_start='03:00',
+        pre_morning_end='06:00'
+    )
 
     # 5. 生成可视化图表
     plot_file = generate_plot(full_df, output_png='result/blood_pressure_plot.png')
