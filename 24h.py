@@ -664,7 +664,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     story.append(Paragraph(note_text, styles['Normal']))
     story.append(Spacer(1, 8))
 
-    detail_data = [["编号", "日期", "时间", "收缩压", "舒张压", "平均压", "脉率", "脉压差"]]
+    detail_data = [["编号", "日期", "时间", "收缩压", "舒张压", "平均压", "脉率", "脉压差", "说明"]]
     for i, row in df.iterrows():
         dt_obj = row['DateTime']
         date_str = dt_obj.strftime('%Y-%m-%d')
@@ -685,7 +685,8 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
             dbp_str,  # 舒张压(附带箭头)
             map_val,  # 平均压
             row['HR'],  # 脉率
-            row['PP']  # 脉压差
+            row['PP'],  # 脉压差
+            row['说明']
         ])
 
     detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60])
