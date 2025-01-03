@@ -17,10 +17,10 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import os
-from matplotlib import font_manager, rcParams
+from matplotlib import rcParams
 # 注册中文字体（宋体），以便在PDF和matplotlib图表中正常显示中文
 pdfmetrics.registerFont(TTFont('SimSun', 'SimSun.ttf'))
-rcParams['font.sans-serif'] = ['PingFang SC', 'SimHei', 'Songti SC']  # 这行可根据实际环境调整
+rcParams['font.sans-serif'] = ['PingFang SC', 'SimHei', 'Songti SC']  # 可根据实际环境调整
 rcParams['axes.unicode_minus'] = False  # 解决坐标轴负号显示问题
 
 # 设定正常血压范围（可根据需要修改）
@@ -91,10 +91,11 @@ def split_day_night(df, day_start='08:00', night_start='23:00'):
     def is_nighttime(t):
         return (t >= night_start_time) or (t < day_start_time)
 
-    # 分别筛选
-    day_df = df[df['DateTime'].dt.time.apply(is_daytime)]
-    night_df = df[df['DateTime'].dt.time.apply(is_nighttime)]
+    # 分别筛选，并使用 .copy() 保证返回的子集是副本
+    day_df = df[df['DateTime'].dt.time.apply(is_daytime)].copy()
+    night_df = df[df['DateTime'].dt.time.apply(is_nighttime)].copy()
 
+    # 第三个返回值 full_df 就是原始 df；也可根据需要决定是否返回 df.copy()
     return day_df, night_df, df
 
 def calc_statistics(df, label='全天'):
@@ -125,8 +126,10 @@ def calc_statistics(df, label='全天'):
             'count': 0
         }
 
+    # 这里对 df 再次拷贝是可选；若上一步的 day_df / night_df 已是副本，可不加
+    # df = df.copy()
+
     # 平均动脉压（MAP）简单计算公式： MAP = DBP + (SBP - DBP) / 3
-    # 也可用其它更精确的公式，这里仅做示例
     df['MAP'] = df['DBP'] + (df['SBP'] - df['DBP']) / 3.0
 
     mean_sbp = df['SBP'].mean()
@@ -192,7 +195,7 @@ def calc_extra_indices(day_stats, night_stats):
     sbp_ratio = round((sbp_night / sbp_day) * 100, 2) if sbp_day != 0 else None
     dbp_ratio = round((dbp_night / dbp_day) * 100, 2) if dbp_day != 0 else None
 
-    # 晨峰血压：可根据自定义时段，如06:00-10:00与前夜均值对比，这里简化为(day - night)
+    # 晨峰血压：可根据自定义时段进行精细计算，这里仅演示 day_mean - night_mean
     sbp_morning_surge = sbp_diff
     dbp_morning_surge = dbp_diff
 
@@ -344,7 +347,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     # 表头
     detail_data = [["编号", "日期", "时间", "收缩压", "舒张压", "平均压", "脉率", "脉压差"]]
 
-    # 遍历所有行，这里可根据需求，只显示前N条或全部
+    # 遍历所有行，也可以只显示部分行
     for i, row in df.iterrows():
         sbp_str = mark_value(row['SBP'], NORMAL_SBP_RANGE[0], NORMAL_SBP_RANGE[1])
         dbp_str = mark_value(row['DBP'], NORMAL_DBP_RANGE[0], NORMAL_DBP_RANGE[1])
@@ -382,9 +385,9 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     # 总结
     summary_text = """
     <b>总结：</b><br/>
-    - 本报告基于所采集的人工测量数据进行简单分析，可能与真实的24h动态血压监测设备结果存在差异；<br/>
-    - 若有异常结果，请结合临床或及时就医；<br/>
-    - 更多指标或自定义分析，后续可根据需要扩展。<br/>
+    · 本报告基于所采集的人工测量数据进行简单分析，可能与真实的24h动态血压监测设备结果存在差异；<br/>
+    · 若有异常结果，请结合临床或及时就医；<br/>
+    · 更多指标或自定义分析，后续可根据需要扩展。<br/>
     """
     story.append(Paragraph(summary_text, styles['Normal']))
 
@@ -397,7 +400,7 @@ def main():
     file_path = "data/blood_pressure-test1.xlsx"  # Excel文件名
     df = read_data_from_excel(file_path)
 
-    # 2. 拆分白天、夜间数据
+    # 2. 拆分白天、夜间数据（并返回副本）
     day_df, night_df, full_df = split_day_night(df, day_start='08:00', night_start='23:00')
 
     # 3. 计算统计指标
