@@ -267,7 +267,8 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     story.append(Spacer(1, 12))
 
     # 简要说明
-    story.append(Paragraph("以下为基于所采集血压数据的统计分析，仅供参考：", styles['Normal']))
+    story.append(Paragraph("你好，我是黄家宝。", styles['Normal']))
+    story.append(Paragraph("以下为基于所采集血压数据的统计分析，仅供个人家庭参考：", styles['Normal']))
     story.append(Spacer(1, 12))
 
     # 组装三段统计表格: 白天、夜间、全天
