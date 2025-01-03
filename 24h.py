@@ -396,7 +396,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
 
 def main():
     # 1. 读取Excel数据
-    file_path = "blood_pressure.xlsx"  # Excel文件路径
+    file_path = "data/blood_pressure-test1.xlsx"  # Excel文件路径
     df = read_data_from_excel(file_path)
 
     # 2. 拆分白天、夜间数据
