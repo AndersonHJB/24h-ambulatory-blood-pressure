@@ -95,13 +95,16 @@ def split_day_night(df, day_start='08:00', night_start='23:00'):
     day_df = df[df['DateTime'].dt.time.apply(is_daytime)].copy()
     night_df = df[df['DateTime'].dt.time.apply(is_nighttime)].copy()
 
-    # 第三个返回值 full_df 就是原始 df；也可根据需要决定是否返回 df.copy()
+    # 第三个返回值 full_df 就是原始 df
     return day_df, night_df, df
 
 def calc_statistics(df, label='全天'):
     """
-    计算收缩压、舒张压、平均压、脉率等的基本统计量。
-    返回一个字典，包含平均值、最大值及其出现时刻、最小值及其出现时刻、标准差、血压负荷等。
+    计算收缩压、舒张压、平均压、脉率等的基本统计量，并包含：
+    - 最大值、最大值发生时刻
+    - 最小值、最小值发生时刻
+    - 平均真实变异(ARV)
+    返回一个字典。
     """
     # 如果数据为空，返回空统计
     if df.empty:
@@ -123,29 +126,39 @@ def calc_statistics(df, label='全天'):
             'dbp_std': None,
             'sbp_load': None,
             'dbp_load': None,
+            'sbp_arv': None,
+            'dbp_arv': None,
             'count': 0
         }
 
     # 计算平均动脉压（MAP）
     df['MAP'] = df['DBP'] + (df['SBP'] - df['DBP']) / 3.0
 
-    mean_sbp = df['SBP'].mean()
+    # 最大和最小 SBP
     max_sbp_idx = df['SBP'].idxmax()
     min_sbp_idx = df['SBP'].idxmin()
 
-    mean_dbp = df['DBP'].mean()
+    # 最大和最小 DBP
     max_dbp_idx = df['DBP'].idxmax()
     min_dbp_idx = df['DBP'].idxmin()
 
+    # 函数：计算 ARV
+    def average_real_variation(series):
+        arr = series.dropna().values
+        if len(arr) < 2:
+            return None
+        return np.mean(np.abs(np.diff(arr)))
+
+    # 组装统计结果
     stats = {
         'label': label,
-        'mean_sbp': round(mean_sbp, 2),
+        'mean_sbp': round(df['SBP'].mean(), 2),
         'max_sbp': int(df.loc[max_sbp_idx, 'SBP']),
         'max_sbp_time': df.loc[max_sbp_idx, 'DateTime'].strftime('%H:%M:%S'),
         'min_sbp': int(df.loc[min_sbp_idx, 'SBP']),
         'min_sbp_time': df.loc[min_sbp_idx, 'DateTime'].strftime('%H:%M:%S'),
 
-        'mean_dbp': round(mean_dbp, 2),
+        'mean_dbp': round(df['DBP'].mean(), 2),
         'max_dbp': int(df.loc[max_dbp_idx, 'DBP']),
         'max_dbp_time': df.loc[max_dbp_idx, 'DateTime'].strftime('%H:%M:%S'),
         'min_dbp': int(df.loc[min_dbp_idx, 'DBP']),
@@ -161,13 +174,14 @@ def calc_statistics(df, label='全天'):
         'sbp_load': f"{round((df['SBP'] >= 140).sum() / len(df) * 100, 2)}%",
         'dbp_load': f"{round((df['DBP'] >= 90).sum() / len(df) * 100, 2)}%",
 
+        # 新增：平均真实变异(ARV)
+        'sbp_arv': round(average_real_variation(df['SBP']), 2) if average_real_variation(df['SBP']) is not None else None,
+        'dbp_arv': round(average_real_variation(df['DBP']), 2) if average_real_variation(df['DBP']) is not None else None,
+
         'count': len(df)
     }
 
     return stats
-
-
-# ============ 以下为改进重点：新增筛选时段、晨峰血压、改进的昼夜差&下降率等计算 ============
 
 def filter_by_time_range(df, start_time_str, end_time_str):
     """
@@ -284,9 +298,6 @@ def calc_extra_indices(day_stats, night_stats, full_df,
 
     return result
 
-
-# ==================================================================
-
 def generate_plot(df, output_png='blood_pressure_plot.png'):
     """
     生成简单的可视化图表（时间-收缩压/舒张压折线图），并保存为PNG文件。
@@ -343,21 +354,57 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     story.append(Paragraph("以下为基于所采集血压数据的统计分析，仅供个人家庭参考：", styles['Normal']))
     story.append(Spacer(1, 12))
 
+    # ========== 新增：在第一个血压汇总表展示最大最小值及其时刻、平均真实变异 ==========
     # 组装三段统计表格: 白天、夜间、全天
     table_data = []
+    # 表头
     table_data.append(["统计项", "白天", "夜间", "全天"])
+
+    # 平均SBP
     table_data.append([
         "平均SBP",
         f"{day_stats['mean_sbp']}" if day_stats['mean_sbp'] else "N/A",
         f"{night_stats['mean_sbp']}" if night_stats['mean_sbp'] else "N/A",
         f"{full_stats['mean_sbp']}" if full_stats['mean_sbp'] else "N/A"
     ])
+    # 最大SBP(含时刻)
+    table_data.append([
+        "最大SBP(时刻)",
+        f"{day_stats['max_sbp']} ({day_stats['max_sbp_time']})" if day_stats['max_sbp'] else "N/A",
+        f"{night_stats['max_sbp']} ({night_stats['max_sbp_time']})" if night_stats['max_sbp'] else "N/A",
+        f"{full_stats['max_sbp']} ({full_stats['max_sbp_time']})" if full_stats['max_sbp'] else "N/A"
+    ])
+    # 最小SBP(含时刻)
+    table_data.append([
+        "最小SBP(时刻)",
+        f"{day_stats['min_sbp']} ({day_stats['min_sbp_time']})" if day_stats['min_sbp'] else "N/A",
+        f"{night_stats['min_sbp']} ({night_stats['min_sbp_time']})" if night_stats['min_sbp'] else "N/A",
+        f"{full_stats['min_sbp']} ({full_stats['min_sbp_time']})" if full_stats['min_sbp'] else "N/A"
+    ])
+
+    # 平均DBP
     table_data.append([
         "平均DBP",
         f"{day_stats['mean_dbp']}" if day_stats['mean_dbp'] else "N/A",
         f"{night_stats['mean_dbp']}" if night_stats['mean_dbp'] else "N/A",
         f"{full_stats['mean_dbp']}" if full_stats['mean_dbp'] else "N/A"
     ])
+    # 最大DBP(含时刻)
+    table_data.append([
+        "最大DBP(时刻)",
+        f"{day_stats['max_dbp']} ({day_stats['max_dbp_time']})" if day_stats['max_dbp'] else "N/A",
+        f"{night_stats['max_dbp']} ({night_stats['max_dbp_time']})" if night_stats['max_dbp'] else "N/A",
+        f"{full_stats['max_dbp']} ({full_stats['max_dbp_time']})" if full_stats['max_dbp'] else "N/A"
+    ])
+    # 最小DBP(含时刻)
+    table_data.append([
+        "最小DBP(时刻)",
+        f"{day_stats['min_dbp']} ({day_stats['min_dbp_time']})" if day_stats['min_dbp'] else "N/A",
+        f"{night_stats['min_dbp']} ({night_stats['min_dbp_time']})" if night_stats['min_dbp'] else "N/A",
+        f"{full_stats['min_dbp']} ({full_stats['min_dbp_time']})" if full_stats['min_dbp'] else "N/A"
+    ])
+
+    # 标准差和血压负荷
     table_data.append([
         "SBP标准差",
         f"{day_stats['sbp_std']}" if day_stats['sbp_std'] else "N/A",
@@ -383,6 +430,20 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         f"{full_stats['dbp_load']}" if full_stats['dbp_load'] else "N/A"
     ])
 
+    # 新增：平均真实变异(ARV)
+    table_data.append([
+        "SBP平均真实变异(ARV)",
+        f"{day_stats['sbp_arv']}" if day_stats['sbp_arv'] is not None else "N/A",
+        f"{night_stats['sbp_arv']}" if night_stats['sbp_arv'] is not None else "N/A",
+        f"{full_stats['sbp_arv']}" if full_stats['sbp_arv'] is not None else "N/A"
+    ])
+    table_data.append([
+        "DBP平均真实变异(ARV)",
+        f"{day_stats['dbp_arv']}" if day_stats['dbp_arv'] is not None else "N/A",
+        f"{night_stats['dbp_arv']}" if night_stats['dbp_arv'] is not None else "N/A",
+        f"{full_stats['dbp_arv']}" if full_stats['dbp_arv'] is not None else "N/A"
+    ])
+
     tbl_style = TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
@@ -394,10 +455,9 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     story.append(stat_table)
     story.append(Spacer(1, 20))
 
-    # 显示额外指标
+    # 显示额外指标：昼夜差、下降率、晨峰等
     story.append(Paragraph("<b>额外指标：</b>", styles['Normal']))
     if extra_indices:
-        # extra_indices 里包含 sbp_morning_surge, dbp_morning_surge 等
         text = f"""
         收缩压(白天): {extra_indices.get('sbp_day', 'N/A')} mmHg，夜间: {extra_indices.get('sbp_night', 'N/A')} mmHg，<br/>
         收缩压差值: {extra_indices.get('sbp_diff', 'N/A')} mmHg，下降率: {extra_indices.get('sbp_dip', 'N/A')}%，<br/>
@@ -417,22 +477,18 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         story.append(Image(plot_file, width=400, height=250))
         story.append(Spacer(1, 20))
 
-    # ===== 新增：血压测量值明细表（编号、日期、时间、收缩压、舒张压、平均压、脉率、脉压差） =====
+    # ===== 血压测量值明细表 =====
     story.append(Paragraph("<b>血压测量值明细</b>", styles['Normal']))
 
     # 表头
     detail_data = [["编号", "日期", "时间", "收缩压", "舒张压", "平均压", "脉率", "脉压差"]]
-
-    # 遍历所有行，也可以只显示部分行
     for i, row in df.iterrows():
         sbp_str = mark_value(row['SBP'], NORMAL_SBP_RANGE[0], NORMAL_SBP_RANGE[1])
         dbp_str = mark_value(row['DBP'], NORMAL_DBP_RANGE[0], NORMAL_DBP_RANGE[1])
 
-        # 取日期和时间
         date_str = row['DateTime'].strftime('%Y-%m-%d')
         time_str = row['DateTime'].strftime('%H:%M:%S')
 
-        # MAP 如果没有则显示空，否则保留两位小数
         map_val = row.get('MAP', None)
         map_val = round(map_val, 2) if map_val is not None else ""
 
@@ -450,7 +506,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60])
     detail_style = TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('BACKGROUND', (0, 0), ( -1, 0), colors.lightgrey),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, -1), 'SimSun'),
     ])
