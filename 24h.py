@@ -653,8 +653,17 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         story.append(Image(plot_file, width=400, height=250))
         story.append(Spacer(1, 20))
 
-    # 明细表
+    # 明细表 - 先增加说明
     story.append(Paragraph("<b>测量明细</b>", styles['Title']))
+    note_text = f"""
+    <b>说明：</b>
+    为方便识别高低血压，系统对收缩压和舒张压进行了标记：<br/>
+    · 正常范围：SBP {NORMAL_SBP_RANGE[0]}~{NORMAL_SBP_RANGE[1]} mmHg；DBP {NORMAL_DBP_RANGE[0]}~{NORMAL_DBP_RANGE[1]} mmHg。<br/>
+    · 超出上述范围时，数值会带有 ↑ 或 ↓ 标识。<br/>
+    """
+    story.append(Paragraph(note_text, styles['Normal']))
+    story.append(Spacer(1, 8))
+
     detail_data = [["编号", "日期", "时间", "收缩压", "舒张压", "平均压", "脉率", "脉压差"]]
     for i, row in df.iterrows():
         dt_obj = row['DateTime']
@@ -664,6 +673,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         map_val = row.get('MAP', None)
         map_val = round(map_val, 2) if map_val is not None else ""
 
+        # 这里用 mark_value() 根据 NORMAL_SBP_RANGE & NORMAL_DBP_RANGE 判断是否加箭头
         sbp_str = mark_value(row['SBP'], NORMAL_SBP_RANGE[0], NORMAL_SBP_RANGE[1])
         dbp_str = mark_value(row['DBP'], NORMAL_DBP_RANGE[0], NORMAL_DBP_RANGE[1])
 
