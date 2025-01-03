@@ -297,81 +297,83 @@ def calc_extra_indices(day_stats, night_stats, full_df,
 
     return result
 
-# ============== 新增：用于分段统计并可视化饼图、柱状图的函数 ==============
-def categorize_bp_series(series, is_sbp=True):
+# ========== 新增函数：根据自定义的日/夜/全天正常范围，绘制六个饼图(H/N/L) ==========
+def plot_bp_six_pies(day_df, night_df, full_df, output_file="result/bp_6_pies.png"):
     """
-    将收缩压或舒张压按区间分类，返回分类结果（Category）。
-    您可以根据需要修改分段区间。
-    """
-    # 这里演示一个常见但相对简单的分段方法
-    if is_sbp:
-        # SBP 分段：<100, 100-120, 120-140, 140-160, 160-180, >=180
-        bins = [0, 100, 120, 140, 160, 180, 9999]
-        labels = ["<100", "100-120", "120-140", "140-160", "160-180", "≥180"]
-    else:
-        # DBP 分段：<60, 60-80, 80-90, 90-100, 100-110, >=110
-        bins = [0, 60, 80, 90, 100, 110, 9999]
-        labels = ["<60", "60-80", "80-90", "90-100", "100-110", "≥110"]
+    参考示例图片的布局，绘制6个饼图：
+      1) 白天收缩压(设定参考范围)  2) 夜间收缩压(设定参考范围)  3) 全天收缩压
+      4) 白天舒张压               5) 夜间舒张压               6) 全天舒张压
 
-    categorized = pd.cut(series, bins=bins, labels=labels, right=False)
-    return categorized
+    每个饼图分为 高(H)/正常(N)/低(L) 三个区块。
+    output_file: 保存的图片文件名
+    """
 
-def plot_day_night_full_distribution(day_df, night_df, full_df, output_prefix="result/bp_distribution"):
-    """
-    生成白天、夜间、全天收缩压/舒张压分段的饼图 + 柱状图。
-    每种图存成独立的PNG文件，返回这些文件名列表，便于后续插入PDF。
-    """
+    # 如果没有 result 文件夹，则创建
     if not os.path.exists("result"):
         os.makedirs("result")
 
-    filenames = []
+    # 定义每个饼图的配置信息：(标题, 数据Series, (low, high))
+    # 你可以根据自己临床或需求，分别设置白天/夜间/全天的参考区间。
+    # 这里仅举例：
+    configs = [
+        ("白天 收缩压(90-135)", day_df['SBP'], (90, 135)),
+        ("夜间 收缩压(80-120)", night_df['SBP'], (80, 120)),
+        ("全天 收缩压(90-140)", full_df['SBP'], (90, 140)),
+        ("白天 舒张压(60-85)", day_df['DBP'], (60, 85)),
+        ("夜间 舒张压(50-70)", night_df['DBP'], (50, 70)),
+        ("全天 舒张压(60-90)", full_df['DBP'], (60, 90)),
+    ]
 
-    # 我们做两种参数: SBP, DBP
-    for param, is_sbp in zip(["SBP", "DBP"], [True, False]):
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        fig.suptitle(f"{param} 白天/夜间/全天分段占比(饼图)")
+    fig, axes = plt.subplots(2, 3, figsize=(10, 6))
+    axes = axes.ravel()  # 变成一维方便迭代
 
-        for i, (sub_df, title) in enumerate(zip([day_df, night_df, full_df], ["Day", "Night", "Full"])):
-            if sub_df.empty:
-                axes[i].set_title(f"{title}\n无数据")
-                axes[i].axis('off')
-                continue
+    # 为高(H)/正常(N)/低(L) 设置固定颜色和标签
+    labels = ["H", "N", "L"]
+    colors = ["tomato", "lightgreen", "lightskyblue"]  # 你可自行调整三种色块
 
-            cat_series = categorize_bp_series(sub_df[param], is_sbp=is_sbp)
-            counts = cat_series.value_counts(dropna=False).sort_index()
-            axes[i].pie(counts, labels=counts.index, autopct='%1.1f%%', startangle=140)
-            axes[i].set_title(f"{title}\n(N={len(sub_df)})")
+    for i, (title, series, ref_range) in enumerate(configs):
+        ax = axes[i]
 
-        plt.tight_layout()
-        # 保存饼图
-        filename_pie = f"{output_prefix}_{param}_pie.png"
-        plt.savefig(filename_pie, dpi=100)
-        plt.close()
-        filenames.append(filename_pie)
+        if series.empty:
+            # 若该时段没有数据，直接空
+            ax.set_title(f"{title}\n无数据")
+            ax.axis('off')
+            continue
 
-        # 再来个柱状图
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        fig.suptitle(f"{param} 白天/夜间/全天分段分布(柱状图)")
+        low, high = ref_range
+        # 计算 H, N, L 三类计数
+        count_H = (series > high).sum()
+        count_L = (series < low).sum()
+        count_N = len(series) - count_H - count_L
 
-        for i, (sub_df, title) in enumerate(zip([day_df, night_df, full_df], ["Day", "Night", "Full"])):
-            if sub_df.empty:
-                axes[i].set_title(f"{title}\n无数据")
-                axes[i].axis('off')
-                continue
+        # 注意：若都为0，会报错，这里做个保护
+        total = count_H + count_N + count_L
+        if total == 0:
+            ax.set_title(f"{title}\n无数据")
+            ax.axis('off')
+            continue
 
-            cat_series = categorize_bp_series(sub_df[param], is_sbp=is_sbp)
-            counts = cat_series.value_counts(dropna=False).sort_index()
-            axes[i].bar(counts.index.astype(str), counts.values, color='skyblue')
-            axes[i].set_title(f"{title}\n(N={len(sub_df)})")
-            axes[i].set_xticklabels(counts.index, rotation=45)
+        data = [count_H, count_N, count_L]
+        # 绘制饼图
+        patches, texts, autotexts = ax.pie(
+            data,
+            labels=labels,
+            colors=colors,
+            autopct=lambda pct: f"{pct:.1f}%" if pct > 0 else "",
+            startangle=140
+        )
+        ax.set_title(f"{title}\n(N={total})", fontsize=10)
 
-        plt.tight_layout()
-        filename_bar = f"{output_prefix}_{param}_bar.png"
-        plt.savefig(filename_bar, dpi=100)
-        plt.close()
-        filenames.append(filename_bar)
+        # 可选：让文字更好看一点
+        for text in texts:
+            text.set_fontsize(9)
+        for autot in autotexts:
+            autot.set_fontsize(9)
 
-    return filenames
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=100)
+    plt.close()
+    return output_file
 
 def generate_plot(df, output_png='blood_pressure_plot.png'):
     """
@@ -405,13 +407,13 @@ def generate_plot(df, output_png='blood_pressure_plot.png'):
     return output_png
 
 def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
-                        df, day_df, night_df,
-                        plot_file='blood_pressure_plot.png',
-                        dist_files=None,
-                        output_pdf='report.pdf'):
+    df, day_df, night_df,
+    plot_file='blood_pressure_plot.png',
+    pie_6_file=None,
+    output_pdf='report.pdf'):
     """
-    使用 reportlab 生成PDF报告，包括统计结果、图表以及血压测量值明细表。
-    dist_files: 饼图、柱状图的文件列表
+    使用reportlab生成PDF报告
+    pie_6_file: 改进后的“六饼图”文件
     """
     doc = SimpleDocTemplate(output_pdf, pagesize=A4)
     styles = getSampleStyleSheet()
@@ -551,15 +553,12 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         story.append(Paragraph(text, styles['Normal']))
     story.append(Spacer(1, 20))
 
-    # ===== 在 PDF 中插入 饼图/柱状图 =====
-    if dist_files:
-        story.append(Paragraph("<b>血压分段分布可视化</b>", styles['Normal']))
-        story.append(Spacer(1, 12))
-        for f in dist_files:
-            if os.path.exists(f):
-                story.append(Image(f, width=400, height=300))
-                story.append(Spacer(1, 20))
-        # 可选：分页
+    # 在PDF中插入“六饼图”
+    if pie_6_file and os.path.exists(pie_6_file):
+        story.append(Paragraph("<b>血压高/正常/低分布（改进饼图）</b>", styles['Normal']))
+        story.append(Spacer(1, 10))
+        story.append(Image(pie_6_file, width=500, height=350))  # 可自行调大小
+        story.append(Spacer(1, 20))
         story.append(PageBreak())
 
     # 若有折线图，则插入图
@@ -634,20 +633,17 @@ def main():
 
     # 4. 计算额外指标（包含昼夜差值、下降率、晨峰血压等改进）
     extra_indices = calc_extra_indices(
-        day_stats,
-        night_stats,
-        full_df,
-        morning_start='06:00',   # 可根据需求自定义
-        morning_end='08:00',
-        pre_morning_start='03:00',
-        pre_morning_end='06:00'
+        day_stats, night_stats, full_df,
+        morning_start='06:00', morning_end='08:00',
+        pre_morning_start='03:00', pre_morning_end='06:00'
     )
 
     # 5. 生成 24h 趋势图
     plot_file = generate_plot(full_df, output_png='result/blood_pressure_plot.png')
 
-    # 6. 生成白天/夜间/全天分段分布的饼图、柱状图
-    dist_files = plot_day_night_full_distribution(day_df, night_df, full_df)
+    # 6. 生成改进后的“六饼图”
+    #    这里演示高/正常/低三分法，且白天/夜间各有不同参考范围
+    six_pies_file = plot_bp_six_pies(day_df, night_df, full_df, output_file="result/bp_6_pies.png")
 
     # 7. 生成PDF报告
     generate_pdf_report(
@@ -659,7 +655,7 @@ def main():
         day_df,
         night_df,
         plot_file=plot_file,
-        dist_files=dist_files,
+        pie_6_file=six_pies_file,
         output_pdf='result/blood_pressure_report.pdf'
     )
 
