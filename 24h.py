@@ -297,7 +297,7 @@ def calc_extra_indices(day_stats, night_stats, full_df,
 
     return result
 
-# ========== 新增函数：根据自定义的日/夜/全天正常范围，绘制六个饼图(H/N/L) ==========
+# ========== 这里是修改的重点：在饼图右下角添加一份图例说明，避免与饼图重叠 ==========
 def plot_bp_six_pies(day_df, night_df, full_df, output_file="result/bp_6_pies.png"):
     """
     参考示例图片的布局，绘制6个饼图：
@@ -306,6 +306,8 @@ def plot_bp_six_pies(day_df, night_df, full_df, output_file="result/bp_6_pies.pn
 
     每个饼图分为 高(H)/正常(N)/低(L) 三个区块。
     output_file: 保存的图片文件名
+
+    在绘图后，会在图的底部(右下角)添加一个图例，标示这三种颜色的含义。
     """
 
     # 如果没有 result 文件夹，则创建
@@ -369,6 +371,24 @@ def plot_bp_six_pies(day_df, night_df, full_df, output_file="result/bp_6_pies.pn
             text.set_fontsize(9)
         for autot in autotexts:
             autot.set_fontsize(9)
+
+    # ------- 新增：在右下角添加图例，避免与6个饼图重叠 -------
+    from matplotlib.patches import Patch
+    legend_patches = [
+        Patch(color="tomato",      label="H(高)"),
+        Patch(color="lightgreen",  label="N(正常)"),
+        Patch(color="lightskyblue",label="L(低)")
+    ]
+    # 调整子图与图例的布局，避免重叠或被裁剪
+    plt.subplots_adjust(bottom=0.15)
+    # loc='lower right'：图例在整张图的右下角
+    # bbox_to_anchor=(1, 0)：再精细微调，以免和坐标轴贴得太近
+    fig.legend(
+        handles=legend_patches,
+        loc='lower right',
+        bbox_to_anchor=(1, 0.02)  # 你可根据实际效果微调
+    )
+    # --------------------------------------------------
 
     plt.tight_layout()
     plt.savefig(output_file, dpi=100)
@@ -597,7 +617,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60])
     detail_style = TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('BACKGROUND', (0, 0), ( -1, 0), colors.lightgrey),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, -1), 'SimSun'),
     ])
