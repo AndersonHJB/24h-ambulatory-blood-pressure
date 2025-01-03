@@ -19,6 +19,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import os
 from matplotlib import rcParams
+
 # 注册中文字体（宋体），以便在PDF和matplotlib图表中正常显示中文
 pdfmetrics.registerFont(TTFont('SimSun', 'SimSun.ttf'))
 rcParams['font.sans-serif'] = ['SimSun', 'PingFang SC', 'SimHei', 'Songti SC']
@@ -26,13 +27,13 @@ rcParams['axes.unicode_minus'] = False  # 解决坐标轴负号显示问题
 
 # ============ 可配置的阈值 ============ #
 NORMAL_SBP_RANGE = (90, 140)  # 明细表中用来标示 SBP ↑ 或 ↓
-NORMAL_DBP_RANGE = (60, 90)   # 明细表中用来标示 DBP ↑ 或 ↓
+NORMAL_DBP_RANGE = (60, 90)  # 明细表中用来标示 DBP ↑ 或 ↓
 
 # 用于饼图三分法
 REF_THRESHOLDS = {
-    'day':   {'SBP': (90, 135), 'DBP': (60, 85)},   # 白天收缩压/舒张压正常区间
-    'night': {'SBP': (80, 120), 'DBP': (50, 70)},   # 夜间收缩压/舒张压正常区间
-    'full':  {'SBP': (90, 140), 'DBP': (60, 90)},   # 全天收缩压/舒张压正常区间
+    'day': {'SBP': (90, 135), 'DBP': (60, 85)},  # 白天收缩压/舒张压正常区间
+    'night': {'SBP': (80, 120), 'DBP': (50, 70)},  # 夜间收缩压/舒张压正常区间
+    'full': {'SBP': (90, 140), 'DBP': (60, 90)},  # 全天收缩压/舒张压正常区间
 }
 
 
@@ -50,7 +51,7 @@ def parse_time_with_day_offset(time_str):
         return None, 0
 
     base_time_str = match.group(1)  # "13:30"
-    offset_str = match.group(2)     # "1", "2"... 可能为 None
+    offset_str = match.group(2)  # "1", "2"... 可能为 None
 
     # 转为 time
     try:
@@ -77,6 +78,7 @@ def mark_value(value, low, high):
         return f"{value}↑"
     else:
         return str(value)
+
 
 def read_data_from_excel(file_path):
     """
@@ -146,8 +148,8 @@ def split_day_night_multi_day(df, day_start='08:00', night_start='23:00'):
 
     # 转换成 time 对象
     fmt = '%H:%M'
-    day_start_t = datetime.strptime(day_start, fmt).time()   # 08:00
-    night_start_t = datetime.strptime(night_start, fmt).time() # 23:00
+    day_start_t = datetime.strptime(day_start, fmt).time()  # 08:00
+    night_start_t = datetime.strptime(night_start, fmt).time()  # 23:00
 
     # 遍历每个日期分组
     for date_val, g in df.groupby('DateOnly'):
@@ -617,18 +619,18 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
             surge_dbp_text = str(extra_indices['dbp_morning_surge'])
 
         text = f"""
-        收缩压(白天): {extra_indices.get('sbp_day','N/A')} mmHg，
-        夜间: {extra_indices.get('sbp_night','N/A')} mmHg，<br/>
-        差值: {extra_indices.get('sbp_diff','N/A')} mmHg，
-        下降率: {extra_indices.get('sbp_dip','N/A')}%，
-        昼夜比(夜/昼): {extra_indices.get('sbp_ratio','N/A')}%，
+        收缩压(白天): {extra_indices.get('sbp_day', 'N/A')} mmHg，
+        夜间: {extra_indices.get('sbp_night', 'N/A')} mmHg，<br/>
+        差值: {extra_indices.get('sbp_diff', 'N/A')} mmHg，
+        下降率: {extra_indices.get('sbp_dip', 'N/A')}%，
+        昼夜比(夜/昼): {extra_indices.get('sbp_ratio', 'N/A')}%，
         晨峰血压: {surge_sbp_text} mmHg<br/><br/>
 
-        舒张压(白天): {extra_indices.get('dbp_day','N/A')} mmHg，
-        夜间: {extra_indices.get('dbp_night','N/A')} mmHg，<br/>
-        差值: {extra_indices.get('dbp_diff','N/A')} mmHg，
-        下降率: {extra_indices.get('dbp_dip','N/A')}%，
-        昼夜比(夜/昼): {extra_indices.get('dbp_ratio','N/A')}%，
+        舒张压(白天): {extra_indices.get('dbp_day', 'N/A')} mmHg，
+        夜间: {extra_indices.get('dbp_night', 'N/A')} mmHg，<br/>
+        差值: {extra_indices.get('dbp_diff', 'N/A')} mmHg，
+        下降率: {extra_indices.get('dbp_dip', 'N/A')}%，
+        昼夜比(夜/昼): {extra_indices.get('dbp_ratio', 'N/A')}%，
         晨峰血压: {surge_dbp_text} mmHg
         """
         story.append(Paragraph(text, styles['Normal']))
@@ -666,14 +668,14 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         dbp_str = mark_value(row['DBP'], NORMAL_DBP_RANGE[0], NORMAL_DBP_RANGE[1])
 
         detail_data.append([
-            i + 1,          # 编号
-            date_str,       # 日期
-            time_str,       # 时间
-            sbp_str,        # 收缩压(附带箭头)
-            dbp_str,        # 舒张压(附带箭头)
-            map_val,        # 平均压
-            row['HR'],      # 脉率
-            row['PP']       # 脉压差
+            i + 1,  # 编号
+            date_str,  # 日期
+            time_str,  # 时间
+            sbp_str,  # 收缩压(附带箭头)
+            dbp_str,  # 舒张压(附带箭头)
+            map_val,  # 平均压
+            row['HR'],  # 脉率
+            row['PP']  # 脉压差
         ])
 
     detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60])
@@ -700,6 +702,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
     # 生成 PDF
     doc.build(story)
     print(f"PDF 报告已生成: {output_pdf}")
+
 
 def main():
     # 1. 读取 Excel，支持时间格式如 "13:30(1)"、"13:30(2)"
