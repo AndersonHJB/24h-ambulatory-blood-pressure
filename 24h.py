@@ -154,8 +154,6 @@ def split_day_night_multi_day(df, day_start='08:00', night_start='23:00'):
     # 遍历每个日期分组
     for date_val, g in df.groupby('DateOnly'):
         sub_df = g.sort_values(by='DateTime')
-        sub_df_day = []
-        sub_df_night = []
 
         # day: day_start -> night_start
         def in_daytime(dt):
@@ -653,6 +651,8 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         story.append(Image(plot_file, width=400, height=250))
         story.append(Spacer(1, 20))
 
+    # =============== 重点修改：让明细表单独一页开始显示 ===============
+    story.append(PageBreak())  # 在明细表之前插入分页
     # 明细表 - 先增加说明
     story.append(Paragraph("<b>测量明细</b>", styles['Title']))
     note_text = f"""
@@ -689,7 +689,9 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
             row['说明']
         ])
 
-    detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60])
+    # =============== 重点修改：将说明列列宽加大，以适应文本宽度 ===============
+    # 明细表 9 列，所以 colWidths 列表也要有 9 个值，否则会报错或列宽不对应
+    detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60, 90])  # 调整最后一个列宽适配说明文字
     detail_style = TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
