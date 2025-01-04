@@ -696,6 +696,8 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        # 再单独让最后一列（列索引为8）左对齐
+        ('ALIGN', (8, 0), (8, -1), 'LEFT'),
         ('FONTNAME', (0, 0), (-1, -1), 'SimSun'),
     ])
     detail_table.setStyle(detail_style)
