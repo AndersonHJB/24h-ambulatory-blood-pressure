@@ -473,10 +473,124 @@ def generate_plot(df, output_png='result/blood_pressure_plot.png'):
     return output_png
 
 
+def plot_distribution_bars(df, output_file="result/bp_distribution_bars.png"):
+    """
+    绘制收缩压(SBP)、舒张压(DBP)、平均压(MAP)、心率(HR)的分布条形图。
+    参考示例中那种分布统计，每个指标一条横坐标，纵坐标是占比(%).
+    """
+    if df.empty:
+        print("数据为空，无法生成分布条形图。")
+        return None
+
+    if not os.path.exists("result"):
+        os.makedirs("result")
+
+    # 若还未生成MAP列，这里补一下
+    if 'MAP' not in df.columns:
+        df['MAP'] = df['DBP'] + (df['SBP'] - df['DBP']) / 3.0
+
+    # 这里根据你提供的图中分组范围，大致配置一下。可以根据实际需求调整。
+    # 收缩压分组
+    sbp_bins = [0, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, np.inf]
+    sbp_labels = ["<=90", "100", "110", "120", "130", "140", "150", "160", "170", "180", "190", ">=200"]
+
+    # 舒张压分组
+    dbp_bins = [0, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, np.inf]
+    dbp_labels = ["<=60", "70", "80", "90", "100", "110", "120", "130", "140", "150", "160", ">=170"]
+
+    # 平均压分组
+    map_bins = [0, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, np.inf]
+    map_labels = ["<=70", "80", "90", "100", "110", "120", "130", "140", "150", "160", "170", "180", ">=180"]
+
+    # 心率分组
+    hr_bins = [0, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, np.inf]
+    hr_labels = [
+        "<=30",  # (0, 30)
+        "30-40",  # (30, 40)
+        "40-50",  # (40, 50)
+        "50-60",  # (50, 60)
+        "60-70",  # (60, 70)
+        "70-80",  # (70, 80)
+        "80-90",  # (80, 90)
+        "90-100",  # (90, 100)
+        "100-110",  # (100, 110)
+        "110-120",  # (110, 120)
+        "120-130",  # (120, 130)
+        "130-140",  # (130, 140)
+        ">=140"  # (140, ∞)
+    ]
+
+    # 利用 pd.cut 做分箱并统计计数
+    df['SBP_bin'] = pd.cut(df['SBP'], bins=sbp_bins, labels=sbp_labels, right=False)
+    df['DBP_bin'] = pd.cut(df['DBP'], bins=dbp_bins, labels=dbp_labels, right=False)
+    df['MAP_bin'] = pd.cut(df['MAP'], bins=map_bins, labels=map_labels, right=False)
+    df['HR_bin'] = pd.cut(df['HR'], bins=hr_bins, labels=hr_labels, right=False)
+
+    sbp_dist = df['SBP_bin'].value_counts(dropna=False)
+    dbp_dist = df['DBP_bin'].value_counts(dropna=False)
+    map_dist = df['MAP_bin'].value_counts(dropna=False)
+    hr_dist = df['HR_bin'].value_counts(dropna=False)
+
+    # 为了和你提供的截图更类似，我们这里手动保证各分组按指定顺序排列
+    sbp_dist = sbp_dist.reindex(sbp_labels).fillna(0)
+    dbp_dist = dbp_dist.reindex(dbp_labels).fillna(0)
+    map_dist = map_dist.reindex(map_labels).fillna(0)
+    hr_dist = hr_dist.reindex(hr_labels).fillna(0)
+
+    # 转为百分比
+    sbp_percent = sbp_dist / sbp_dist.sum() * 100
+    dbp_percent = dbp_dist / dbp_dist.sum() * 100
+    map_percent = map_dist / map_dist.sum() * 100
+    hr_percent = hr_dist / hr_dist.sum() * 100
+
+    # 开始画图：4个子图
+    fig, axs = plt.subplots(4, 1, figsize=(8, 10), sharex=False)
+    fig.subplots_adjust(hspace=0.4)
+
+    # 1) 收缩压
+    axs[0].bar(sbp_labels, sbp_percent, color='gray', edgecolor='black')
+    axs[0].set_ylim(0, 100)
+    axs[0].set_title("收缩压 (85-140) 分布", fontsize=12)
+    axs[0].set_ylabel("%")
+    # 给每个bar顶部加上数值
+    for idx, val in enumerate(sbp_percent):
+        axs[0].text(idx, val + 1, f"{val:.1f}", ha='center', va='bottom', fontsize=9)
+
+    # 2) 舒张压
+    axs[1].bar(dbp_labels, dbp_percent, color='gray', edgecolor='black')
+    axs[1].set_ylim(0, 100)
+    axs[1].set_title("舒张压 (55-90) 分布", fontsize=12)
+    axs[1].set_ylabel("%")
+    for idx, val in enumerate(dbp_percent):
+        axs[1].text(idx, val + 1, f"{val:.1f}", ha='center', va='bottom', fontsize=9)
+
+    # 3) 平均压
+    axs[2].bar(map_labels, map_percent, color='gray', edgecolor='black')
+    axs[2].set_ylim(0, 100)
+    axs[2].set_title("平均压 (100-120) 分布", fontsize=12)
+    axs[2].set_ylabel("%")
+    for idx, val in enumerate(map_percent):
+        axs[2].text(idx, val + 1, f"{val:.1f}", ha='center', va='bottom', fontsize=9)
+
+    # 4) 脉率(心率)
+    axs[3].bar(hr_labels, hr_percent, color='gray', edgecolor='black')
+    axs[3].set_ylim(0, 100)
+    axs[3].set_title("脉率 (60-90) 分布", fontsize=12)
+    axs[3].set_ylabel("%")
+    for idx, val in enumerate(hr_percent):
+        axs[3].text(idx, val + 1, f"{val:.1f}", ha='center', va='bottom', fontsize=9)
+
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=100)
+    plt.close()
+    return output_file
+
+
 def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
                         df, day_df, night_df,
                         plot_file=None,
                         pie_6_file=None,
+                        distribution_file=None,
                         output_pdf='result/blood_pressure_report.pdf'):
     """
     生成 PDF 报告。
@@ -651,6 +765,14 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         story.append(Image(plot_file, width=400, height=250))
         story.append(Spacer(1, 20))
 
+    # =============== 新增：插入分布条形图 ===============
+    if distribution_file and os.path.exists(distribution_file):
+        story.append(PageBreak())  # 分页显示，也可自行去掉
+        story.append(Paragraph("<b>血压 & 平均压 & 心率 分布条形图</b>", styles['Title']))
+        story.append(Spacer(1, 10))
+        story.append(Image(distribution_file, width=450, height=600))  # 可根据需要调整
+        story.append(Spacer(1, 20))
+
     # =============== 重点修改：让明细表单独一页开始显示 ===============
     story.append(PageBreak())  # 在明细表之前插入分页
     # 明细表 - 先增加说明
@@ -673,7 +795,6 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         map_val = row.get('MAP', None)
         map_val = round(map_val, 2) if map_val is not None else ""
 
-        # 这里用 mark_value() 根据 NORMAL_SBP_RANGE & NORMAL_DBP_RANGE 判断是否加箭头
         sbp_str = mark_value(row['SBP'], NORMAL_SBP_RANGE[0], NORMAL_SBP_RANGE[1])
         dbp_str = mark_value(row['DBP'], NORMAL_DBP_RANGE[0], NORMAL_DBP_RANGE[1])
 
@@ -686,12 +807,11 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
             map_val,  # 平均压
             row['HR'],  # 脉率
             row['PP'],  # 脉压差
-            row['说明']
+            row.get('说明', "") or row.get('Note', "")  # 说明/Note
         ])
 
-    # =============== 重点修改：将说明列列宽加大，以适应文本宽度 ===============
-    # 明细表 9 列，所以 colWidths 列表也要有 9 个值，否则会报错或列宽不对应
-    detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60, 90])  # 调整最后一个列宽适配说明文字
+    # 明细表 9 列，所以 colWidths 列表也要有 9 个值
+    detail_table = Table(detail_data, colWidths=[40, 70, 60, 60, 60, 60, 40, 60, 90])
     detail_style = TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
@@ -749,12 +869,15 @@ def main():
                                      thresholds=REF_THRESHOLDS,
                                      output_file="result/bp_6_pies.png")
 
-    # 6. 生成 PDF 报告
+    # 5.1 新增：生成收缩压/舒张压/平均压/心率的分布条形图
+    distribution_file = plot_distribution_bars(full_df, output_file="result/bp_distribution_bars.png")
+    # 6. 生成 PDF 报告（将分布条形图一起插入）
     generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
-                        full_df, day_df, night_df,
-                        plot_file=plot_file,
-                        pie_6_file=six_pies_file,
-                        output_pdf='result/blood_pressure_report.pdf')
+        full_df, day_df, night_df,
+        plot_file=plot_file,
+        pie_6_file=six_pies_file,
+        distribution_file=distribution_file,
+        output_pdf='result/blood_pressure_report.pdf')
 
 
 if __name__ == '__main__':
