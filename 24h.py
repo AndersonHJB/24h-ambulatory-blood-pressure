@@ -717,7 +717,7 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
 
 def main():
     # 1. 读取 Excel，支持时间格式如 "13:30(1)"、"13:30(2)"
-    file_path = "data/blood_pressure-test2.xlsx"
+    file_path = "data/24h动态血压数据.xlsx"
     df = read_data_from_excel(file_path)
     if df.empty:
         print("Excel 数据为空或无法解析，请检查文件。")
