@@ -750,39 +750,16 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
         story.append(Paragraph("无可计算结果或数据不足。", styles['Normal']))
     story.append(Spacer(1, 20))
 
-    # 在PDF中插入“六饼图”
-    if pie_6_file and os.path.exists(pie_6_file):
-        story.append(Paragraph("<b>血压分布（高/正常/低）饼图</b>", styles['Title']))
-        story.append(Spacer(1, 10))
-        story.append(Image(pie_6_file, width=500, height=350))  # 可自行调大小
-        story.append(Spacer(1, 20))
-        story.append(PageBreak())
-
-    # 若有折线图，则插入图
-    if plot_file and os.path.exists(plot_file):
-        story.append(Paragraph("<b>24小时趋势图</b>", styles['Title']))
-        story.append(Spacer(1, 10))
-        story.append(Image(plot_file, width=400, height=250))
-        story.append(Spacer(1, 20))
-
-    # =============== 新增：插入分布条形图 ===============
-    if distribution_file and os.path.exists(distribution_file):
-        story.append(PageBreak())  # 分页显示，也可自行去掉
-        story.append(Paragraph("<b>血压 & 平均压 & 心率 分布条形图</b>", styles['Title']))
-        story.append(Spacer(1, 10))
-        story.append(Image(distribution_file, width=450, height=600))  # 可根据需要调整
-        story.append(Spacer(1, 20))
-
     # =============== 重点修改：让明细表单独一页开始显示 ===============
     story.append(PageBreak())  # 在明细表之前插入分页
     # 明细表 - 先增加说明
     story.append(Paragraph("<b>测量明细</b>", styles['Title']))
     note_text = f"""
-    <b>说明：</b>
-    为方便识别高低血压，系统对收缩压和舒张压进行了标记：<br/>
-    · 正常范围：SBP {NORMAL_SBP_RANGE[0]}~{NORMAL_SBP_RANGE[1]} mmHg；DBP {NORMAL_DBP_RANGE[0]}~{NORMAL_DBP_RANGE[1]} mmHg。<br/>
-    · 超出上述范围时，数值会带有 ↑ 或 ↓ 标识。<br/>
-    """
+        <b>说明：</b>
+        为方便识别高低血压，系统对收缩压和舒张压进行了标记：<br/>
+        · 正常范围：SBP {NORMAL_SBP_RANGE[0]}~{NORMAL_SBP_RANGE[1]} mmHg；DBP {NORMAL_DBP_RANGE[0]}~{NORMAL_DBP_RANGE[1]} mmHg。<br/>
+        · 超出上述范围时，数值会带有 ↑ 或 ↓ 标识。<br/>
+        """
     story.append(Paragraph(note_text, styles['Normal']))
     story.append(Spacer(1, 8))
 
@@ -826,13 +803,37 @@ def generate_pdf_report(day_stats, night_stats, full_stats, extra_indices,
 
     # 总结
     summary_text = """
-    <b>总结：</b><br/>
-    · 本程序开发初衷只为我老婆孕期血压跟踪开发！<br/> 
-    · 本报告结果仅供个人参考，不能替代医用设备。<br/> 
-    · 建议在医生指导下做进一步检查或专业的动态血压监测。<br/>
-    · 若血压持续异常，请尽快就医。
-    """
+        <b>总结：</b><br/>
+        · 本程序开发初衷只为我老婆孕期血压跟踪开发！<br/> 
+        · 本报告结果仅供个人参考，不能替代医用设备。<br/> 
+        · 建议在医生指导下做进一步检查或专业的动态血压监测。<br/>
+        · 若血压持续异常，请尽快就医。
+        """
     story.append(Paragraph(summary_text, styles['Normal']))
+
+    story.append(PageBreak())
+    # 在PDF中插入“六饼图”
+    if pie_6_file and os.path.exists(pie_6_file):
+        story.append(Paragraph("<b>血压分布（高/正常/低）饼图</b>", styles['Title']))
+        story.append(Spacer(1, 10))
+        story.append(Image(pie_6_file, width=500, height=350))  # 可自行调大小
+        story.append(Spacer(1, 20))
+        story.append(PageBreak())
+
+    # 若有折线图，则插入图
+    if plot_file and os.path.exists(plot_file):
+        story.append(Paragraph("<b>24小时趋势图</b>", styles['Title']))
+        story.append(Spacer(1, 10))
+        story.append(Image(plot_file, width=400, height=250))
+        story.append(Spacer(1, 20))
+
+    # =============== 新增：插入分布条形图 ===============
+    if distribution_file and os.path.exists(distribution_file):
+        story.append(PageBreak())  # 分页显示，也可自行去掉
+        story.append(Paragraph("<b>血压 & 平均压 & 心率 分布条形图</b>", styles['Title']))
+        story.append(Spacer(1, 10))
+        story.append(Image(distribution_file, width=450, height=600))  # 可根据需要调整
+        story.append(Spacer(1, 20))
 
     # 生成 PDF
     doc.build(story)
